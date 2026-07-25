@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Controle de Validade</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1B1F23">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#1B1F23;
+    --paper:#EFEAE0;
+    --paper-2:#E4DECF;
+    --steel:#445069;
+    --amber:#E3A008;
+    --danger:#C1392B;
+    --safe:#2F6F4E;
+    --line: rgba(27,31,35,0.14);
+    --radius: 10px;
+    font-family: 'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--ink);
+    color:var(--paper);
+    min-height:100vh;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #app{
+    max-width:480px;
+    margin:0 auto;
+    min-height:100vh;
+    background:var(--paper);
+    color:var(--ink);
+    display:flex;
+    flex-direction:column;
+    position:relative;
+  }
+  header.topbar{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:16px 18px 14px;
+    background:var(--ink);
+    color:var(--paper);
+    position:sticky; top:0; z-index:10;
+  }
+  header.topbar .back{
+    background:none;border:none;color:var(--paper);font-size:20px;cursor:pointer;padding:4px 8px;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  header.topbar h1{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:17px; font-weight:700; letter-spacing:0.2px; margin:0;
+  }
+  main{flex:1; padding:18px; padding-bottom:40px;}
+  .screen{display:none;}
+  .screen.active{display:block; animation:fade .18s ease;}
+  @keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
+
+  /* HOME - ticket / shelf-label aesthetic */
+  .ticket{
+    background:var(--ink); color:var(--paper);
+    border-radius:14px;
+    padding:22px 20px;
+    margin-bottom:22px;
+    position:relative;
+    overflow:hidden;
+  }
+  .ticket::before{
+    content:"";
+    position:absolute; left:0; right:0; bottom:-9px;
+    height:18px;
+    background-image: radial-gradient(circle at 9px 9px, var(--paper) 4.5px, transparent 4.6px);
+    background-size:18px 18px;
+    background-repeat:repeat-x;
+  }
+  .ticket .eyebrow{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:2px;
+    text-transform:uppercase; color:var(--amber); margin-bottom:6px;
+  }
+  .ticket h2{
+    font-family:'Space Grotesk',sans-serif; font-size:24px; margin:0 0 4px;
+  }
+  .ticket .sub{font-size:13px; color:#C9C4B8;}
+  .barcode-row{display:flex; gap:2px; align-items:flex-end; height:30px; margin-top:14px;}
+  .barcode-row span{background:var(--paper); display:block;}
+
+  .grid-actions{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;}
+  .action-card{
+    background:white; border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px 14px; text-align:left; cursor:pointer;
+    display:flex; flex-direction:column; gap:8px;
+    font-family:'Inter',sans-serif;
+  }
+  .action-card .ico{font-size:22px;}
+  .action-card b{font-size:14px; font-weight:600;}
+  .action-card small{font-size:11.5px; color:#666; line-height:1.3;}
+  .action-card:active{transform:scale(0.98);}
+
+  .status-bar{
+    display:flex; justify-content:space-between; align-items:center;
+    font-family:'IBM Plex Mono',monospace; font-size:11.5px;
+    background:var(--paper-2); border-radius:8px; padding:10px 14px; color:#4A4536;
+    margin-bottom:6px;
+  }
+  .status-bar .dot{width:8px;height:8px;border-radius:50%; display:inline-block; margin-right:6px;}
+  .dot.on{background:var(--safe);}
+  .dot.off{background:var(--danger);}
+
+  /* FORMS */
+  label{display:block; font-size:12.5px; font-weight:600; margin:14px 0 6px; color:#333;}
+  input[type=text], input[type=date], input[type=number], input[type=file], select{
+    width:100%; padding:12px 12px; border-radius:8px; border:1.5px solid var(--line);
+    font-size:15px; background:white; font-family:'Inter',sans-serif;
+  }
+  input:focus, select:focus{outline:2px solid var(--steel); outline-offset:1px;}
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding:13px 18px; border-radius:8px; border:none; cursor:pointer;
+    font-family:'Inter',sans-serif; font-weight:600; font-size:14.5px; width:100%; margin-top:14px;
+  }
+  .btn-primary{background:var(--ink); color:var(--paper);}
+  .btn-primary:active{background:#000;}
+  .btn-secondary{background:white; color:var(--ink); border:1.5px solid var(--ink);}
+  .btn-danger{background:var(--danger); color:white;}
+  .btn-amber{background:var(--amber); color:var(--ink);}
+  .btn:disabled{opacity:.45; cursor:not-allowed;}
+
+  #camera-wrap{position:relative; border-radius:10px; overflow:hidden; background:#000; margin-top:10px;}
+  video{width:100%; display:block; max-height:280px; object-fit:cover;}
+  .scan-frame{
+    position:absolute; top:50%; left:8%; right:8%; height:70px; transform:translateY(-50%);
+    border:2px solid var(--amber); border-radius:6px; pointer-events:none;
+  }
+  .cam-controls{display:flex; gap:8px; margin-top:8px;}
+
+  .manual-toggle{font-size:12.5px; color:var(--steel); text-decoration:underline; background:none; border:none; cursor:pointer; padding:8px 0;}
+
+  .photo-preview{width:100%; border-radius:8px; margin-top:10px; border:1.5px solid var(--line); max-height:220px; object-fit:cover;}
+
+  .dup-alert{
+    background:#FDF0D8; border:1.5px solid var(--amber); border-radius:8px; padding:12px 14px;
+    font-size:13px; margin-top:12px; line-height:1.5;
+  }
+  .dup-alert b{display:block; margin-bottom:4px;}
+
+  /* CONSULTA */
+  .search-row{display:flex; gap:8px; margin-bottom:12px;}
+  .search-row input{flex:1;}
+  .filter-chips{display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap;}
+  .chip{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; padding:6px 10px; border-radius:20px;
+    border:1.5px solid var(--line); background:white; cursor:pointer;
+  }
+  .chip.active{background:var(--ink); color:var(--paper); border-color:var(--ink);}
+
+  .record-card{
+    background:white; border-radius:10px; border:1.5px solid var(--line);
+    padding:13px 14px; margin-bottom:10px; border-left:5px solid var(--steel);
+  }
+  .record-card.status-ok{border-left-color:var(--safe);}
+  .record-card.status-warn{border-left-color:var(--amber);}
+  .record-card.status-expired{border-left-color:var(--danger);}
+  .rc-top{display:flex; justify-content:space-between; align-items:flex-start; gap:8px;}
+  .rc-top b{font-size:14.5px;}
+  .rc-tag{font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:3px 8px; border-radius:20px; white-space:nowrap;}
+  .rc-tag.status-ok{background:#E1F0E7; color:var(--safe);}
+  .rc-tag.status-warn{background:#FBEBC8; color:#8A6300;}
+  .rc-tag.status-expired{background:#F6DCD8; color:var(--danger);}
+  .rc-meta{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#666; margin-top:6px; line-height:1.7;}
+  .rc-thumb{width:44px; height:44px; border-radius:6px; object-fit:cover; border:1px solid var(--line);}
+  .rc-row{display:flex; gap:10px; align-items:flex-start;}
+
+  .empty-state{
+    text-align:center; padding:50px 20px; color:#777;
+  }
+  .empty-state .ico{font-size:34px; margin-bottom:10px;}
+
+  .toast{
+    position:fixed; bottom:22px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:var(--paper); padding:12px 18px; border-radius:30px;
+    font-size:13px; z-index:50; max-width:90%; text-align:center; box-shadow:0 6px 20px rgba(0,0,0,.3);
+  }
+
+  .info-box{background:var(--paper-2); border-radius:8px; padding:12px 14px; font-size:12.5px; line-height:1.6; margin-top:14px; color:#4A4536;}
+  .divider{height:1px; background:var(--line); margin:20px 0;}
+  .small-note{font-size:11.5px; color:#888; margin-top:6px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <button class="back" id="btnBack" style="visibility:hidden">←</button>
+    <h1 id="screenTitle">Controle de Validade</h1>
+  </header>
+  <main>
+
+    <!-- HOME -->
+    <section class="screen active" id="screen-home">
+      <div class="ticket">
+        <div class="eyebrow">Estoque · Perecíveis</div>
+        <h2>Controle de Validade</h2>
+        <div class="sub" id="homeSummary">Carregando dados...</div>
+        <div class="barcode-row" id="barcodeDeco"></div>
+      </div>
+
+      <div class="status-bar">
+        <span><span class="dot off" id="driveDot"></span>Google Drive: <b id="driveStatusText">desconectado</b></span>
+        <span id="lastExportText">nunca exportado</span>
+      </div>
+
+      <div class="grid-actions" style="margin-top:18px;">
+        <button class="action-card" onclick="nav('cadastro')">
+          <span class="ico">📷</span>
+          <b>Cadastrar</b>
+          <small>Ler código de barras e registrar validade</small>
+        </button>
+        <button class="action-card" onclick="nav('consulta')">
+          <span class="ico">🔎</span>
+          <b>Consultar</b>
+          <small>Ver produtos e status de validade</small>
+        </button>
+        <button class="action-card" onclick="nav('importar')">
+          <span class="ico">📥</span>
+          <b>Importar base EAN</b>
+          <small>Upload de CSV/XLSX com códigos e descrições</small>
+        </button>
+        <button class="action-card" onclick="nav('exportar')">
+          <span class="ico">☁️</span>
+          <b>Exportar p/ Drive</b>
+          <small>Enviar registros e fotos para o Google Drive</small>
+        </button>
+      </div>
+
+      <button class="btn btn-secondary" id="btnDriveLoginHome" onclick="driveLogin()">Fazer login no Google Drive</button>
+    </section>
+
+    <!-- CADASTRO -->
+    <section class="screen" id="screen-cadastro">
+      <div id="scanStage">
+        <div id="camera-wrap">
+          <video id="video" autoplay playsinline muted></video>
+          <div class="scan-frame"></div>
+        </div>
+        <div class="cam-controls">
+          <button class="btn btn-secondary" onclick="startScanner()">Reiniciar câmera</button>
+        </div>
+        <button class="manual-toggle" onclick="toggleManual()">Digitar EAN manualmente</button>
+        <div id="manualBox" style="display:none;">
+          <label>Código EAN</label>
+          <input type="text" id="manualEan" inputmode="numeric" placeholder="Ex: 7891000100103">
+          <button class="btn btn-primary" onclick="submitManualEan()">Buscar</button>
+        </div>
+      </div>
+
+      <div id="dupAlertBox"></div>
+
+      <form id="formCadastro" style="display:none;">
+        <div class="divider"></div>
+        <label>Código EAN</label>
+        <input type="text" id="fEan" readonly style="background:#F2F0EA;">
+
+        <label>Descrição</label>
+        <input type="text" id="fDescricao" placeholder="Descrição do produto">
+
+        <label>Validade *</label>
+        <input type="date" id="fValidade" required>
+
+        <label>Lote</label>
+        <input type="text" id="fLote" placeholder="Número do lote (opcional)">
+
+        <label>Foto do produto</label>
+        <div id="photoStage">
+          <button type="button" class="btn btn-secondary" onclick="openPhotoCam()">Tirar foto</button>
+          <img id="photoPreview" class="photo-preview" style="display:none;">
+        </div>
+        <div id="photoCamWrap" style="display:none;">
+          <div id="camera-wrap-photo" style="position:relative; border-radius:10px; overflow:hidden; background:#000; margin-top:10px;">
+            <video id="videoPhoto" autoplay playsinline muted style="width:100%;max-height:280px;object-fit:cover;display:block;"></video>
+          </div>
+          <div class="cam-controls">
+            <button type="button" class="btn btn-primary" onclick="capturePhoto()">Capturar</button>
+            <button type="button" class="btn btn-secondary" onclick="closePhotoCam()">Cancelar</button>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-primary" onclick="saveRegistro()">Salvar registro</button>
+        <button type="button" class="btn btn-secondary" onclick="resetCadastro()">Cancelar / novo código</button>
+      </form>
+    </section>
+
+    <!-- CONSULTA -->
+    <section class="screen" id="screen-consulta">
+      <div class="search-row">
+        <input type="text" id="searchInput" placeholder="Buscar por EAN ou descrição" oninput="renderConsulta()">
+      </div>
+      <div class="filter-chips">
+        <button class="chip active" data-f="todos" onclick="setFiltro('todos')">Todos</button>
+        <button class="chip" data-f="vencido" onclick="setFiltro('vencido')">Vencidos</button>
+        <button class="chip" data-f="alerta" onclick="setFiltro('alerta')">Vencendo (≤15d)</button>
+        <button class="chip" data-f="ok" onclick="setFiltro('ok')">Ok</button>
+      </div>
+      <div id="consultaList"></div>
+    </section>
+
+    <!-- IMPORTAR -->
+    <section class="screen" id="screen-importar">
+      <label>Arquivo CSV ou XLSX</label>
+      <div class="info-box">O arquivo deve ter duas colunas: <b>cod_ean</b> e <b>descricao</b> (nomes de coluna flexíveis — o app tenta reconhecer automaticamente as duas primeiras colunas relevantes).</div>
+      <input type="file" id="importFile" accept=".csv,.xlsx,.xls" style="margin-top:12px;">
+      <button class="btn btn-primary" onclick="importarBase()">Importar</button>
+      <div id="importResult" class="small-note"></div>
+      <div class="divider"></div>
+      <div id="baseCount" class="small-note"></div>
+      <button class="btn btn-secondary" onclick="limparBase()">Apagar base geral de EAN</button>
+    </section>
+
+    <!-- EXPORTAR -->
+    <section class="screen" id="screen-exportar">
+      <div class="status-bar">
+        <span><span class="dot off" id="driveDot2"></span>Google Drive: <b id="driveStatusText2">desconectado</b></span>
+      </div>
+      <button class="btn btn-secondary" onclick="driveLogin()">Fazer login no Google Drive</button>
+      <div class="info-box">
+        A exportação cria (ou reutiliza) a pasta <b>ControleValidade_Export</b> no seu Google Drive, com uma subpasta por data. Envia um CSV com todos os registros e as fotos nomeadas como <span style="font-family:'IBM Plex Mono',monospace;">EAN_DATA.jpg</span>.
+      </div>
+      <button class="btn btn-primary" id="btnExportar" onclick="exportarDrive()" disabled>Exportar agora</button>
+      <div id="exportProgress" class="small-note"></div>
+      <div class="divider"></div>
+      <div class="small-note">Última exportação: <b id="lastExportText2">nunca</b></div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+/* =========================================================
+   CONFIGURAÇÃO — troque pelo seu Client ID (ver README.md)
+   ========================================================= */
+const GOOGLE_CLIENT_ID = "SEU_CLIENT_ID_AQUI.apps.googleusercontent.com";
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const MAX_REGISTROS_POR_EAN = 5;
+
+/* =========================================================
+   BANCO LOCAL (IndexedDB)
+   ========================================================= */
+let db;
+const DB_NAME = "controle_validade_db";
+const DB_VERSION = 1;
+
+function openDB(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e)=>{
+      const _db = e.target.result;
+      if(!_db.objectStoreNames.contains('ean_base')){
+        _db.createObjectStore('ean_base', {keyPath:'cod_ean'});
+      }
+      if(!_db.objectStoreNames.contains('leituras')){
+        const store = _db.createObjectStore('leituras', {keyPath:'id', autoIncrement:true});
+        store.createIndex('ean', 'ean', {unique:false});
+        store.createIndex('validade', 'validade', {unique:false});
+      }
+      if(!_db.objectStoreNames.contains('config')){
+        _db.createObjectStore('config', {keyPath:'key'});
+      }
+    };
+    req.onsuccess = (e)=>{ db = e.target.result; resolve(db); };
+    req.onerror = (e)=> reject(e);
+  });
+}
+
+function tx(store, mode='readonly'){
+  return db.transaction(store, mode).objectStore(store);
+}
+function reqToPromise(req){
+  return new Promise((res, rej)=>{ req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error); });
+}
+
+async function dbGetAll(store){ return reqToPromise(tx(store).getAll()); }
+async function dbPut(store, obj){ return reqToPromise(tx(store,'readwrite').put(obj)); }
+async function dbDelete(store, key){ return reqToPromise(tx(store,'readwrite').delete(key)); }
+async function dbClear(store){ return reqToPromise(tx(store,'readwrite').clear()); }
+async function dbGet(store, key){ return reqToPromise(tx(store).get(key)); }
+async function dbGetByIndex(store, index, value){
+  return reqToPromise(tx(store).index(index).getAll(value));
+}
+
+/* =========================================================
+   NAVEGAÇÃO
+   ========================================================= */
+const TITLES = {home:"Controle de Validade", cadastro:"Cadastrar produto", consulta:"Consultar produtos", importar:"Importar base EAN", exportar:"Exportar para o Drive"};
+let currentScreen = 'home';
+
+function nav(screen){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+screen).classList.add('active');
+  document.getElementById('screenTitle').textContent = TITLES[screen];
+  document.getElementById('btnBack').style.visibility = screen==='home' ? 'hidden' : 'visible';
+  currentScreen = screen;
+  stopScanner();
+  closePhotoCam();
+  if(screen==='cadastro'){ resetCadastro(); startScanner(); }
+  if(screen==='consulta'){ renderConsulta(); }
+  if(screen==='importar'){ refreshBaseCount(); }
+  if(screen==='exportar'){ refreshExportUI(); }
+}
+document.getElementById('btnBack').onclick = ()=> nav('home');
+
+function toast(msg, ms=2600){
+  const t = document.createElement('div');
+  t.className='toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), ms);
+}
+
+/* =========================================================
+   HOME
+   ========================================================= */
+async function refreshHome(){
+  const leituras = await dbGetAll('leituras');
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  let vencidos=0, alerta=0;
+  leituras.forEach(r=>{
+    const st = statusValidade(r.validade, hoje);
+    if(st==='expired') vencidos++;
+    else if(st==='warn') alerta++;
+  });
+  document.getElementById('homeSummary').textContent =
+    `${leituras.length} registro(s) · ${vencidos} vencido(s) · ${alerta} vencendo em breve`;
+
+  const cfg = await dbGet('config','last_export');
+  document.getElementById('lastExportText').textContent = cfg ? "Exportado em "+cfg.value : "nunca exportado";
+  document.getElementById('lastExportText2').textContent = cfg ? cfg.value : "nunca";
+
+  // barcode decoration
+  const deco = document.getElementById('barcodeDeco');
+  deco.innerHTML='';
+  for(let i=0;i<40;i++){
+    const bar = document.createElement('span');
+    const w = [2,3,4,5][Math.floor(Math.random()*4)];
+    bar.style.width = w+'px';
+    bar.style.height = (Math.random()>0.7 ? '100%' : (60+Math.random()*40)+'%');
+    deco.appendChild(bar);
+  }
+}
+
+function statusValidade(validadeStr, hojeRef){
+  const hoje = hojeRef || new Date(); hoje.setHours(0,0,0,0);
+  const v = new Date(validadeStr+'T00:00:00');
+  const diffDias = Math.round((v - hoje)/86400000);
+  if(diffDias < 0) return 'expired';
+  if(diffDias <= 15) return 'warn';
+  return 'ok';
+}
+function statusLabel(st){
+  return {expired:'Vencido', warn:'Vencendo', ok:'Ok'}[st];
+}
+
+/* =========================================================
+   CADASTRO — SCANNER DE CÓDIGO DE BARRAS
+   ===============================
